@@ -1,3 +1,5 @@
+import os
+
 import copy
 import logging
 from dataclasses import dataclass, field
@@ -9,6 +11,8 @@ import utils
 from torch.utils.data import Dataset
 from transformers import Trainer
 import pdb
+
+from peft import PeftModel, LoraConfig, PeftConfig, get_peft_model, TaskType
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "<pad>"
@@ -110,6 +114,9 @@ def preprocess(
         label[:source_len] = IGNORE_INDEX
     return dict(input_ids=input_ids, labels=labels)
 
+# Detect if the model path is a LoRA fine-tuned model
+def is_lora_model(path):
+    return os.path.isfile(os.path.join(path, "adapter_config.json"))
 
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
@@ -169,18 +176,34 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
 def train():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    training_args.label_names = ["labels"]
 
-    model = transformers.AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
+    is_aya = "aya" in model_args.model_name_or_path.lower()
+    is_peft = os.path.isfile(os.path.join(model_args.model_name_or_path, "adapter_config.json"))
+
+    ModelClass = transformers.AutoModelForSeq2SeqLM if is_aya else transformers.AutoModelForCausalLM
+
+    if is_peft:
+         # Load PEFT config to find the base model
+        peft_config = PeftConfig.from_pretrained(model_args.model_name_or_path)
+        base_model_dir = peft_config.base_model_name_or_path
+    else:
+        base_model_dir = model_args.model_name_or_path
+    
+    model = ModelClass.from_pretrained(
+        base_model_dir,
         cache_dir=training_args.cache_dir,
+        local_files_only=True
     )
     
+    # Aya tokenizer fail if pass use_fast=False
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
+        local_files_only=True,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=False,
+        use_fast=True if is_aya else False,
     )
 
     special_tokens_dict = dict()
@@ -198,6 +221,27 @@ def train():
         tokenizer=tokenizer,
         model=model,
     )
+
+    # Check and load existing LoRA adapter if applicable
+    if is_peft:
+        model = PeftModel.from_pretrained(model, model_args.model_name_or_path, local_files_only=True, is_trainable=True)
+        print(f"[LoRA] Loaded adapter from: {model_args.model_name_or_path} (base: {base_model_dir})")
+    else:
+        # Create and apply new LoRA config
+        is_aya = "aya" in model_args.model_name_or_path.lower()
+        lora_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.05,
+            bias="none",
+            target_modules=["q", "v"] if is_aya else ["q_proj", "v_proj"],
+            task_type=TaskType.SEQ_2_SEQ_LM if is_aya else TaskType.CAUSAL_LM
+        )
+        model = get_peft_model(model, lora_config)
+        print(f"[LoRA] Initialized new config for {'Aya' if is_aya else 'Causal'} model")
+
+    # Print which parameters are trainable
+    model.print_trainable_parameters()
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)

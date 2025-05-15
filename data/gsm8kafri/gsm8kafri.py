@@ -25,7 +25,11 @@ import json
 import random
 logger = datasets.logging.get_logger(__name__)
 
-class GSM8KInstructDataConfig(datasets.BuilderConfig):
+_INSTRUCTIONS = [
+    "Translate the following sentences from {source_lang} to English.", 
+]
+
+class TranslationDataConfig(datasets.BuilderConfig):
     """BuilderConfig for TranslationData."""
 
     def __init__(self, config: str, **kwargs):
@@ -33,14 +37,12 @@ class GSM8KInstructDataConfig(datasets.BuilderConfig):
         Args:
           **kwargs: keyword arguments forwarded to super.
         """
-        super(GSM8KInstructDataConfig, self).__init__(**kwargs)
-        # self.lang, self.lang = config.rsplit("_", maxsplit=1)
+        super(TranslationDataConfig, self).__init__(**kwargs)
         self.lang = config
 
-
-class GSM8KInstructData(datasets.GeneratorBasedBuilder):
+class TranslationData(datasets.GeneratorBasedBuilder):
     """This is an adapter for loading raw text parallel corpus."""
-    BUILDER_CONFIG_CLASS = GSM8KInstructDataConfig
+    BUILDER_CONFIG_CLASS = TranslationDataConfig
 
     def _info(self):
         return datasets.DatasetInfo(
@@ -67,15 +69,17 @@ class GSM8KInstructData(datasets.GeneratorBasedBuilder):
         logger.info("generating examples from = %s", filepath)
         key = 0
 
-        filepath = "data/metamath/MetaMathQA-395K.json"
+        filepath = "data/gsm8kafri/gsm8kafri.json"
         with open(f"{filepath}", encoding="utf-8") as f:
             data = json.load(f)
             for d in data:
-                question, answer = d['query'], d['response']
+                source_line, target_line = d['query'], d['query_en']
                 yield key, {
                     "id": key,
-                    "instruction": question,
+                    "instruction":  _INSTRUCTIONS[0].format_map({
+                                            "source_lang": d['lang'], 
+                                        }) + ' ' + source_line.strip(),
                     "input": "",
-                    "output": answer,
+                    "output": target_line.strip(),
                 }
                 key += 1
