@@ -189,7 +189,11 @@ def load_datasets(data_path, split:str="train", streaming_name_whitelist=["trans
             end = int(end) if end else int(1e9)
             dataset = Dataset.from_list(list(dataset.skip(start).take(end - start)))
         else:
-            dataset = load_dataset(os.path.join(data_path_base, dataset_name), config=dataset_config, split=f"{split}{dataset_range}")
+            try:
+                dataset = load_dataset(os.path.join(data_path_base, dataset_name), config=dataset_config, split=f"{split}{dataset_range}", trust_remote_code=True)
+            except:
+                # For snli dataset
+                dataset = load_dataset(os.path.join(data_path_base, dataset_name), split=f"{split}{dataset_range}", trust_remote_code=True)
         try:
             datasets.append(dataset.add_column("from", [f"{dataset_name}_{dataset_config}"] * len(dataset)))
         except ValueError:

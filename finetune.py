@@ -30,6 +30,14 @@ PROMPT_DICT = {
         "Write a response that appropriately completes the request.\n\n"
         "### Instruction:\n{instruction}\n\n### Response:"
     ),
+    "prompt_no_input-gemma2-it": (
+        "<bos><start_of_turn>user"
+        "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n {instruction} \n\n Let's think step by step. <end_of_turn>"
+        "<start_of_turn>model"
+    ),
+    "prompt_nli": (
+        'Premise: {premise}\nHypothesis: {hypothesis}\nLabel:'
+    ),
 }
 
 
@@ -127,12 +135,23 @@ class SupervisedDataset(Dataset):
         list_data_dict = list(utils.load_datasets(data_path))
 
         logging.warning("Formatting inputs...")
-        prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMPT_DICT["prompt_no_input"]
-        sources = [
-            prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(example)
-            for example in list_data_dict
-        ]
-        targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
+        dataset_name = os.path.basename(data_path)
+        if "nli" in dataset_name:
+            prompt_nli = PROMPT_DICT["prompt_nli"]
+            sources = [
+                prompt_nli.format_map(example) for example in list_data_dict
+            ]
+            targets = [f"{example['label']}{tokenizer.eos_token}" for example in list_data_dict]
+        else:
+            prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMT_NO_INPUT
+            sources = [
+                prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(example)
+                for example in list_data_dict
+            ]
+            targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
+
+        print("sources", sources[0])
+        print("targets", targets[0])
 
         logging.warning("Tokenizing inputs... This may take some time...")
         data_dict = preprocess(sources, targets, tokenizer)
@@ -178,8 +197,13 @@ def train():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     training_args.label_names = ["labels"]
 
-    is_aya = "aya" in model_args.model_name_or_path.lower()
+    model_name = model_args.model_name_or_path.split("/")[-1].lower()
+
+    is_aya = "aya" in model_name
     is_peft = os.path.isfile(os.path.join(model_args.model_name_or_path, "adapter_config.json"))
+
+    global PROMT_NO_INPUT 
+    PROMT_NO_INPUT = PROMPT_DICT["prompt_no_input-gemma2-it"] if "gemma-2-9b-it" in model_name else PROMPT_DICT["prompt_no_input"]
 
     ModelClass = transformers.AutoModelForSeq2SeqLM if is_aya else transformers.AutoModelForCausalLM
 
@@ -228,7 +252,7 @@ def train():
         print(f"[LoRA] Loaded adapter from: {model_args.model_name_or_path} (base: {base_model_dir})")
     else:
         # Create and apply new LoRA config
-        is_aya = "aya" in model_args.model_name_or_path.lower()
+        is_aya = "aya" in model_name
         lora_config = LoraConfig(
             r=16,
             lora_alpha=32,
