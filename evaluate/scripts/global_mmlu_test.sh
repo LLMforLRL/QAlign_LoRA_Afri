@@ -5,7 +5,7 @@
 #SBATCH --account=def-annielee
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=quangphuoc.nguyen@ontariotechu.net
-#SBATCH --output=outfile/eval_mmlu-prox-%j.out
+#SBATCH --output=outfile/eval_global-mmlu-%j.out
 
 #############################################################
 # install the environment by loading in python and required packages
@@ -24,8 +24,16 @@ SCRATCH_PATH=~/scratch/QAlign
 MODEL_PATH3=$SCRATCH_PATH/model/$MODEL3
 
 # For 13B model, you may need to set batch_size smaller, like 16, to avoid OOM issue.
-python $PROJECT_PATH/scripts/mgsm_test.py \
+# python $PROJECT_PATH/evaluate/scripts/global_mmlu_test.py \
+#     --model_path $MODEL_PATH1 \
+#     --batch_size 8 \
+
+# # For 13B model, you may need to set batch_size smaller, like 16, to avoid OOM issue.
+# python $PROJECT_PATH/evaluate/scripts/global_mmlu_test.py \
+#     --model_path $MODEL_PATH2 \
+#     --batch_size 8 \
+
+# For 13B model, you may need to set batch_size smaller, like 16, to avoid OOM issue.
+python $PROJECT_PATH/evaluate/scripts/global_mmlu_test.py \
     --model_path $MODEL_PATH3 \
-    --streategy Parallel \
     --batch_size 8 \
-    --lang_only Bengali Thai Swahili Japanese Chinese German French Russian Spanish English

@@ -5,15 +5,19 @@ from typing import Callable
 
 import torch
 from tqdm import tqdm
-from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM
+import transformers
 from typing import Optional, Dict, Sequence, List
 import argparse
 import os
 import shutil
 import pdb
+
+from peft import PeftModel, LoraConfig, PeftConfig, get_peft_model, TaskType
+
+
 def main(
     args,
-    gsm8k_test_jsonl: str = "./data/mgsm",
+    gsm8k_test_jsonl: str = "./evaluate/scripts/data/mgsm",
     is_bf16: bool = True,
     save_dir: str  = None,
 ):
@@ -21,13 +25,15 @@ def main(
     print(f"main start, is_bf16:{is_bf16}, batch_size:{batch_size}")
     
     model_path = args.model_path
+    model_name = model_path.split("/")[-1]
+
     model, tokenizer = get_model(model_path, is_bf16=is_bf16)
     print("model loaded")
 
     batch_llama = get_batch_llama(model, tokenizer)
 
     if save_dir is None:
-        save_dir = f"{model_path}/mgsm"
+        save_dir =  f"./results/mgsm/{model_name}"
     
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
@@ -43,7 +49,7 @@ def main(
         
         if args.streategy == 'Parallel':
             if lang ==  'En_gsm8k':
-                with open('./data/test_use.jsonl', "r", encoding='utf-8') as f:
+                with open('./evaluate/scripts/data/test_use.jsonl', "r", encoding='utf-8') as f:
                     gsm8k_datas = [json.loads(line) for line in f]
     
             else:
@@ -51,7 +57,7 @@ def main(
                     gsm8k_datas = [json.loads(line) for line in f]
         else:
             if lang ==  'En_gsm8k':
-                with open('./data/test_use.jsonl', "r", encoding='utf-8') as f:
+                with open('./evaluate/scripts/data/test_use.jsonl', "r", encoding='utf-8') as f:
                     gsm8k_datas = [json.loads(line) for line in f]
     
             else:
@@ -66,7 +72,7 @@ def main(
         
         for i in tqdm(range(start_index, len(gsm8k_datas), batch_size)):
             cur_gsm8k_batch = gsm8k_datas[i : i + batch_size]
-            input_str_list, output_str_list = gsm8k_batch_gen(lang, 
+            input_str_list, output_str_list = gsm8k_batch_gen(model_name, lang, 
                 [d["query"] for d in cur_gsm8k_batch], batch_llama
             )
             for j, (gsm8k_data, input_str, output_str) in enumerate(
@@ -130,21 +136,29 @@ def main(
 
 
 def gsm8k_batch_gen(
-    lang_, gsm8k_questions, batch_llm
+    model_name, lang_, gsm8k_questions, batch_llm
 ):
     lang = lang_ if lang_ != 'En_gsm8k' else 'English'
-    prompt_no_input = (
-      "Below is an instruction that describes a task. "
-        f"Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{query}\n\n### Response:"
+    is_it = "-it" in model_name
+    if "-it" in model_name:
+        prompt_no_input = (
+        "<bos><start_of_turn>user"
+        "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n {query} \n\n Let's think step by step. <end_of_turn>"
+        "<start_of_turn>model"
     )
+    else:
+        prompt_no_input = (
+        "Below is an instruction that describes a task. "
+            f"Write a response that appropriately completes the request.\n\n"
+            "### Instruction:\n{query}\n\n### Response:"
+        )
 
     input_str_list = [prompt_no_input.format(query=q) for q in gsm8k_questions]
     output_str_list = batch_llm(input_str_list)
     return input_str_list, output_str_list
 
 
-def get_batch_llama(model: LlamaForCausalLM, tokenizer: LlamaTokenizer):
+def get_batch_llama(model, tokenizer):
     @torch.inference_mode()
     def batch_llama(input_strs):
         input_ids_w_attnmask = tokenizer(
@@ -155,8 +169,8 @@ def get_batch_llama(model: LlamaForCausalLM, tokenizer: LlamaTokenizer):
         output_ids = model.generate(
             input_ids=input_ids_w_attnmask.input_ids,
             attention_mask=input_ids_w_attnmask.attention_mask,
-            generation_config=GenerationConfig(
-                max_new_tokens=600,
+            generation_config=transformers.GenerationConfig(
+                max_new_tokens=512,
                 do_sample=False,
                 temperature=0.0,  # t=0.0 raise error if do_sample=True
             ),
@@ -172,8 +186,19 @@ def get_batch_llama(model: LlamaForCausalLM, tokenizer: LlamaTokenizer):
 
 
 def get_model(model_path: str, is_bf16: bool = False):
-    print(model_path)
-    tokenizer = LlamaTokenizer.from_pretrained(model_path, padding_side="left")
+    is_aya = "aya" in model_path.lower()
+    is_peft = os.path.isfile(os.path.join(model_path, "adapter_config.json"))
+
+    ModelClass = transformers.AutoModelForSeq2SeqLM if is_aya else transformers.AutoModelForCausalLM
+
+    if is_peft:
+         # Load PEFT config to find the base model
+        peft_config = PeftConfig.from_pretrained(model_path)
+        base_model_dir = peft_config.base_model_name_or_path
+    else:
+        base_model_dir = model_path
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(base_model_dir, padding_side="left")
     print(tokenizer.pad_token)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -185,14 +210,18 @@ def get_model(model_path: str, is_bf16: bool = False):
     print(tokenizer.padding_side)
 
     if is_bf16:
-        model = LlamaForCausalLM.from_pretrained(
-            model_path,
+        model = ModelClass.from_pretrained(
+            base_model_dir,
             torch_dtype=torch.bfloat16,
         ).cuda()
     else:
-        model = LlamaForCausalLM.from_pretrained(
-            model_path,
+        model = ModelClass.from_pretrained(
+            base_model_dir,
         ).cuda()
+    # Check and load existing LoRA adapter if applicable
+    if is_peft:
+        model = PeftModel.from_pretrained(model, model_path, local_files_only=True, is_trainable=False)
+        print(f"[LoRA] Loaded adapter from: {model_path} (base: {base_model_dir})")
     model.eval()
     print(model.dtype)
 

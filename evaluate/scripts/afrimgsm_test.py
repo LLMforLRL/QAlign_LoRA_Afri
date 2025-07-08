@@ -7,14 +7,16 @@ import torch
 from tqdm import tqdm
 import transformers
 from typing import Optional, Dict, Sequence, List
+
+import csv
+import os
 import argparse
 
 from peft import PeftModel, LoraConfig, PeftConfig, get_peft_model, TaskType
 
-
 def main(
     args,
-    gsm8k_test_jsonl: str = "./evaluate/scripts/data/msvamp",
+    afrimgsm_dir: str = "./evaluate/scripts/data/afrimgsm",
     is_bf16: bool = True,
     save_dir: str  = None,
 ):
@@ -23,34 +25,40 @@ def main(
     
     model_path = args.model_path
     model_name = model_path.split("/")[-1]
-
     model, tokenizer = get_model(model_path, is_bf16=is_bf16)
     print("model loaded")
 
     batch_llama = get_batch_llama(model, tokenizer)
 
     if save_dir is None:
-        save_dir = f"./results/msvamp/{model_name}"
+        save_dir = f"./results/afrimgsm/{model_name}"
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
     if args.lang_only is None:
-        langs = ['Swahili', 'English','Chinese','Bengali', 'German', 'Spanish', 'French', 'Japanese', 'Russian', 'Thai']
+        files = os.listdir(afrimgsm_dir)
+        langs = [file.split("_")[1] for file in files]
     else:
         langs = args.lang_only
+    print(f"langs: {langs}")
     sources = []
     targets = []
     results = {}
     for lang in langs:
         print(f'===========we are testing in {lang}====================')
         
+        datas = []
         if args.streategy == 'Parallel':
-            with open(f'{gsm8k_test_jsonl}/test_{lang}.json', "r", encoding='utf-8') as f:
-                gsm8k_datas = [json.loads(line) for line in f]
+            with open(f'{afrimgsm_dir}/data_{lang}_test.tsv', "r", encoding='utf-8') as f:
+                reader = csv.reader(f, delimiter="\t")
+                for row in reader:
+                    datas.append({"query": row[0], "response": row[2]})
         else:
                
-            with open(f'{gsm8k_test_jsonl}/test_English.json', "r", encoding='utf-8') as f:
-                gsm8k_datas = [json.loads(line) for line in f]
+            with open(f'{afrimgsm_dir}/data_en_test.tsv', "r", encoding='utf-8') as f:
+                reader = csv.reader(f, delimiter="\t")
+                for row in reader:
+                    datas.append({"query": row[0], "response": row[2]})
 
         gen_datas_jsonl = Path(save_dir) / f"gen_{lang}_datas.jsonl"
         start_index = (
@@ -58,19 +66,19 @@ def main(
         )
         print(f"start_index: {start_index}")
         
-        for i in tqdm(range(start_index, len(gsm8k_datas), batch_size)):
-            cur_gsm8k_batch = gsm8k_datas[i : i + batch_size]
+        for i in tqdm(range(start_index, len(datas), batch_size)):
+            cur_batch = datas[i : i + batch_size]
             input_str_list, output_str_list = gsm8k_batch_gen(model_name, lang, 
-                [d["m_query"] for d in cur_gsm8k_batch], batch_llama
+                [d["query"] for d in cur_batch], batch_llama
             )
-            for j, (gsm8k_data, input_str, output_str) in enumerate(
-                zip(cur_gsm8k_batch, input_str_list, output_str_list)
+            for j, (afrimgsm_data, input_str, output_str) in enumerate(
+                zip(cur_batch, input_str_list, output_str_list)
             ):
                 with open(gen_datas_jsonl, "a", encoding='utf-8') as f:
                     json.dump(
                         dict(
                             index=i + j,
-                            svamp_data=gsm8k_data,
+                            afrimgsm_data=afrimgsm_data,
                             input_str=input_str,
                             output_str=output_str,
                         ),
@@ -87,7 +95,7 @@ def main(
         for gen in gen_datas:
             result = dict(
                 **gen,
-                extract_true_num=extract_last_num(gen["svamp_data"]["response"]),
+                extract_true_num=extract_last_num(gen["afrimgsm_data"]["response"]),
                 extract_pred_num=extract_last_num(gen["output_str"]),
                 is_correct=None,
             )
@@ -109,13 +117,14 @@ def main(
         results[lang] = num_result
     average = sum(results.values()) / len(results)
     print(average)
-    import csv
-    with open(Path(save_dir) / f"SVAMP_evaluate_results_bs{batch_size}.csv", 'w', newline='') as file:
+
+    with open(Path(save_dir) / f"afrimgsm_evaluate_results_bs{batch_size}.csv", 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Language', 'Accuracy'])
         for key, value in results.items():
             writer.writerow([key, value])
         writer.writerow(['Average', average])
+    exit()
     
 
 
@@ -138,7 +147,6 @@ def gsm8k_batch_gen(
             "### Instruction:\n{query}\n\n### Response:"
         )
     print(f"Prompt used:\n {prompt_no_input}")
-
     input_str_list = [prompt_no_input.format(query=q) for q in gsm8k_questions]
     output_str_list = batch_llm(input_str_list)
     return input_str_list, output_str_list

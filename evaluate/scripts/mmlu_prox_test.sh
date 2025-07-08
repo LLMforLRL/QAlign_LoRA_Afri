@@ -24,8 +24,16 @@ SCRATCH_PATH=~/scratch/QAlign
 MODEL_PATH3=$SCRATCH_PATH/model/$MODEL3
 
 # For 13B model, you may need to set batch_size smaller, like 16, to avoid OOM issue.
-python $PROJECT_PATH/scripts/mgsm_test.py \
+# python $PROJECT_PATH/evaluate/scripts/mmlu_prox_test.py \
+#     --model_path $MODEL_PATH1 \
+#     --batch_size 8 \
+
+# # For 13B model, you may need to set batch_size smaller, like 16, to avoid OOM issue.
+# python $PROJECT_PATH/evaluate/scripts/mmlu_prox_test.py \
+#     --model_path $MODEL_PATH2 \
+#     --batch_size 8 \
+
+# For 13B model, you may need to set batch_size smaller, like 16, to avoid OOM issue.
+python $PROJECT_PATH/evaluate/scripts/mmlu_prox_test.py \
     --model_path $MODEL_PATH3 \
-    --streategy Parallel \
     --batch_size 8 \
-    --lang_only Bengali Thai Swahili Japanese Chinese German French Russian Spanish English

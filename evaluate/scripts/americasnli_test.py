@@ -1,5 +1,6 @@
 import json
 import re
+import pandas as pd
 from pathlib import Path
 from typing import Callable
 
@@ -7,14 +8,16 @@ import torch
 from tqdm import tqdm
 import transformers
 from typing import Optional, Dict, Sequence, List
+
+import csv
+import os
 import argparse
 
 from peft import PeftModel, LoraConfig, PeftConfig, get_peft_model, TaskType
 
-
 def main(
     args,
-    gsm8k_test_jsonl: str = "./evaluate/scripts/data/msvamp",
+    americasnli_dir: str = "./evaluate/scripts/data/americasnli",
     is_bf16: bool = True,
     save_dir: str  = None,
 ):
@@ -22,35 +25,27 @@ def main(
     print(f"main start, is_bf16:{is_bf16}, batch_size:{batch_size}")
     
     model_path = args.model_path
-    model_name = model_path.split("/")[-1]
-
     model, tokenizer = get_model(model_path, is_bf16=is_bf16)
     print("model loaded")
 
     batch_llama = get_batch_llama(model, tokenizer)
 
     if save_dir is None:
-        save_dir = f"./results/msvamp/{model_name}"
+        save_dir = "./results/americasnli"
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
-    if args.lang_only is None:
-        langs = ['Swahili', 'English','Chinese','Bengali', 'German', 'Spanish', 'French', 'Japanese', 'Russian', 'Thai']
-    else:
-        langs = args.lang_only
+    with open(f"{americasnli_dir}/test.json", "r", encoding="utf-8") as f:
+        df = pd.read_json(f)
+    langs = df['lang'].unique()
+
     sources = []
     targets = []
     results = {}
     for lang in langs:
         print(f'===========we are testing in {lang}====================')
         
-        if args.streategy == 'Parallel':
-            with open(f'{gsm8k_test_jsonl}/test_{lang}.json', "r", encoding='utf-8') as f:
-                gsm8k_datas = [json.loads(line) for line in f]
-        else:
-               
-            with open(f'{gsm8k_test_jsonl}/test_English.json', "r", encoding='utf-8') as f:
-                gsm8k_datas = [json.loads(line) for line in f]
+        datas = df[df['lang'] == lang].to_dict(orient='records')
 
         gen_datas_jsonl = Path(save_dir) / f"gen_{lang}_datas.jsonl"
         start_index = (
@@ -58,19 +53,19 @@ def main(
         )
         print(f"start_index: {start_index}")
         
-        for i in tqdm(range(start_index, len(gsm8k_datas), batch_size)):
-            cur_gsm8k_batch = gsm8k_datas[i : i + batch_size]
-            input_str_list, output_str_list = gsm8k_batch_gen(model_name, lang, 
-                [d["m_query"] for d in cur_gsm8k_batch], batch_llama
+        for i in tqdm(range(start_index, len(datas), batch_size)):
+            cur_batch = datas[i : i + batch_size]
+            input_str_list, output_str_list = nli_batch_gen(lang, 
+                [d for d in cur_batch], batch_llama
             )
-            for j, (gsm8k_data, input_str, output_str) in enumerate(
-                zip(cur_gsm8k_batch, input_str_list, output_str_list)
+            for j, (americasnli_data, input_str, output_str) in enumerate(
+                zip(cur_batch, input_str_list, output_str_list)
             ):
                 with open(gen_datas_jsonl, "a", encoding='utf-8') as f:
                     json.dump(
                         dict(
                             index=i + j,
-                            svamp_data=gsm8k_data,
+                            americasnli_data=americasnli_data,
                             input_str=input_str,
                             output_str=output_str,
                         ),
@@ -87,11 +82,11 @@ def main(
         for gen in gen_datas:
             result = dict(
                 **gen,
-                extract_true_num=extract_last_num(gen["svamp_data"]["response"]),
-                extract_pred_num=extract_last_num(gen["output_str"]),
+                target=gen["americasnli_data"]["response"],
+                pred=gen["output_str"],
                 is_correct=None,
             )
-            if abs(result["extract_true_num"] - result["extract_pred_num"]) < 1e-3:
+            if result["target"] == result["pred"]:
                 result["is_correct"] = True
                 correct_results.append(result)
             else:
@@ -109,8 +104,8 @@ def main(
         results[lang] = num_result
     average = sum(results.values()) / len(results)
     print(average)
-    import csv
-    with open(Path(save_dir) / f"SVAMP_evaluate_results_bs{batch_size}.csv", 'w', newline='') as file:
+
+    with open(Path(save_dir) / f"americasnli_evaluate_results_bs{batch_size}.csv", 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Language', 'Accuracy'])
         for key, value in results.items():
@@ -119,27 +114,18 @@ def main(
     
 
 
-def gsm8k_batch_gen(
-    model_name, lang_, gsm8k_questions, batch_llm
+def nli_batch_gen(
+    lang_, nli_pre_hyp_pairs, batch_llm
 ):
     lang = lang_ if lang_ != 'En_gsm8k' else 'English'
-    is_it = "-it" in model_name
-    print(f"model name: {model_name}, is -it {is_it}")
-    if "-it" in model_name:
-        prompt_no_input = (
-        "<bos><start_of_turn>user"
-        "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n {query} \n\n Let's think step by step. <end_of_turn>"
-        "<start_of_turn>model"
-    )
-    else:
-        prompt_no_input = (
-        "Below is an instruction that describes a task. "
-            f"Write a response that appropriately completes the request.\n\n"
-            "### Instruction:\n{query}\n\n### Response:"
-        )
-    print(f"Prompt used:\n {prompt_no_input}")
-
-    input_str_list = [prompt_no_input.format(query=q) for q in gsm8k_questions]
+    prompt_no_input = ('Premise: {premise}\nHypothesis: {hypothesis}\nLabel:')
+    input_str_list = [
+        prompt_no_input.format(
+            premise=pre_hyp_pair['premise'], 
+            hypothesis=pre_hyp_pair['hypothesis']
+            ) 
+            for pre_hyp_pair in nli_pre_hyp_pairs
+        ]
     output_str_list = batch_llm(input_str_list)
     return input_str_list, output_str_list
 
@@ -211,16 +197,6 @@ def get_model(model_path: str, is_bf16: bool = False):
     print(model.dtype)
 
     return model, tokenizer
-
-
-def extract_last_num(text: str) -> float:
-    text = re.sub(r"(\d),(\d)", "\g<1>\g<2>", text)  # 处理形如 123,456
-    res = re.findall(r"(\d+(\.\d+)?)", text)  # 匹配 123456.789
-    if len(res) > 0:
-        num_str = res[-1][0]
-        return float(num_str)
-    else:
-        return 0.0
 
 
 if __name__ == "__main__":
