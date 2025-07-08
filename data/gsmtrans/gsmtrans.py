@@ -77,8 +77,8 @@ class TranslationData(datasets.GeneratorBasedBuilder):
                 for target_lang in lang_pool:
                     target_name = languages.get(alpha2=target_lang).name
 
-                    source_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_question/en-{}/train.{}'.format(target_lang, self.config.source_lang)
-                    target_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_question/en-{}/train.{}'.format(target_lang, target_lang)
+                    source_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_question/en-{}/train.{}'.format(target_lang, self.config.source_lang)
+                    target_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_question/en-{}/train.{}'.format(target_lang, target_lang)
 
                     if os.path.exists(source_path) and os.path.exists(target_path):
                         with open(source_path, encoding="utf-8") as source_f, open(target_path, encoding="utf-8") as target_f:
@@ -102,8 +102,8 @@ class TranslationData(datasets.GeneratorBasedBuilder):
                 for source_lang in lang_pool:
                     source_name = languages.get(alpha2=source_lang).name
 
-                    source_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_question/{}-{}/train.{}'.format(source_lang, target_lang, source_lang)
-                    target_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_question/{}-{}/train.{}'.format(source_lang, target_lang, target_lang)
+                    source_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_question/{}-{}/train.{}'.format(source_lang, target_lang, source_lang)
+                    target_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_question/{}-{}/train.{}'.format(source_lang, target_lang, target_lang)
 
                     if os.path.exists(source_path) and os.path.exists(target_path):
                         with open(source_path, encoding="utf-8") as source_f, open(target_path, encoding="utf-8") as target_f:
@@ -146,8 +146,8 @@ class TranslationData(datasets.GeneratorBasedBuilder):
                 for target_lang in lang_pool:
                     target_name = languages.get(alpha2=target_lang).name
 
-                    source_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_answer/en-{}/train.{}'.format(target_lang, self.config.source_lang)
-                    target_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_answer/en-{}/train.{}'.format(target_lang, target_lang)
+                    source_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_answer/en-{}/train.{}'.format(target_lang, self.config.source_lang)
+                    target_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_answer/en-{}/train.{}'.format(target_lang, target_lang)
 
                     if os.path.exists(source_path) and os.path.exists(target_path):
                         with open(source_path, encoding="utf-8") as source_f, open(target_path, encoding="utf-8") as target_f:
@@ -173,8 +173,8 @@ class TranslationData(datasets.GeneratorBasedBuilder):
                 for source_lang in lang_pool:
                     source_name = languages.get(alpha2=source_lang).name
 
-                    source_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_answer/{}-en/train.{}'.format(source_lang, source_lang)
-                    target_path='/cpfs01/user/zhuwenhao/open-source/QAlign/code/data/gsmtrans/gsm8kinstruct_answer/{}-en/train.{}'.format(source_lang, self.config.target_lang)
+                    source_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_answer/{}-en/train.{}'.format(source_lang, source_lang)
+                    target_path='/home/bumie304/projects/def-annielee/bumie304/QAlign/data/gsmtrans/gsm8kinstruct_answer/{}-en/train.{}'.format(source_lang, self.config.target_lang)
 
                     if os.path.exists(source_path) and os.path.exists(target_path):
                         with open(source_path, encoding="utf-8") as source_f, open(target_path, encoding="utf-8") as target_f:

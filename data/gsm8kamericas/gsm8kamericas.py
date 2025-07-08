@@ -27,9 +27,6 @@ logger = datasets.logging.get_logger(__name__)
 
 _INSTRUCTIONS = [
     "Translate the following sentences from {source_lang} to English.", 
-    "<bos><start_of_turn>user"
-    "Translate the following sentences from {source_lang} to English."
-    "<start_of_turn>model",
 ]
 
 class TranslationDataConfig(datasets.BuilderConfig):
@@ -72,7 +69,7 @@ class TranslationData(datasets.GeneratorBasedBuilder):
         logger.info("generating examples from = %s", filepath)
         key = 0
 
-        filepath = "data/gsm8kafri/gsm8kafri.json"
+        filepath = "data/gsm8kamericas/gsm8kamericas.json"
         with open(f"{filepath}", encoding="utf-8") as f:
             data = json.load(f)
             for d in data:
