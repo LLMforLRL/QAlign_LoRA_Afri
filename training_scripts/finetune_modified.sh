@@ -44,7 +44,8 @@ esac
 
 # source $PROJECT_PATH/ENV/bin/activate
 
-torchrun --nproc_per_node=2 --master_port=$PORT \
+# Reduce actual batch size to 2 or 4
+torchrun --nproc_per_node=3 --master_port=$PORT \
     $PROJECT_PATH/finetune.py \
 	${METHOD_ARGS[@]} \
 	${MODEL_ARGS[@]} \
@@ -60,8 +61,9 @@ torchrun --nproc_per_node=2 --master_port=$PORT \
     --lr_scheduler_type "cosine" \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
-    --save_strategy "no" \
-    --save_steps 2000 \
+    --resume_from_checkpoint True \
+    --save_strategy "steps" \
+    --save_steps 500 \
     --save_total_limit 1 \
     --load_best_model_at_end True \
     --logging_steps 1 \

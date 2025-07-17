@@ -193,7 +193,22 @@ def load_datasets(data_path, split:str="train", streaming_name_whitelist=["trans
                 dataset = load_dataset(os.path.join(data_path_base, dataset_name), config=dataset_config, split=f"{split}{dataset_range}", trust_remote_code=True)
             except:
                 # For snli dataset
-                dataset = load_dataset(os.path.join(data_path_base, dataset_name), split=f"{split}{dataset_range}", trust_remote_code=True)
+                if dataset_name == "snli":
+                    logging.info("Loading snli, excluding overlapping sample from snli ques trans...")
+                    dataset = load_dataset(os.path.join(data_path_base, dataset_name), split=f"{split}", trust_remote_code=True)
+                    len_dataset = len(dataset)
+                    logging.info(f"Original length: {len_dataset}")
+                    with open("/home/bumie304/projects/def-annielee/bumie304/QAlign/data/snli-query-translation/snli-query-translation.json", 'r', encoding='utf-8') as f:
+                        snli_ques_trans = json.load(f)
+                    exclude_sentence = set([record["query_en"] for record in snli_ques_trans])
+                    filtered_dataset = dataset.filter(lambda example: f"Premise: {example['premise']}\nHypothesis: {example['hypothesis']}\nLabel:" not in exclude_sentence)
+                    logging.info(f"Filtered length: {len(filtered_dataset)}")
+                    start, end = dataset_range[1:-1].split(":")
+                    start = int(start) if start else 0
+                    end = int(end) if end else int(1e9)
+                    dataset = filtered_dataset[start:min(end, len_dataset)]
+                else:
+                    dataset = load_dataset(os.path.join(data_path_base, dataset_name), split=f"{split}{dataset_range}", trust_remote_code=True)
         try:
             datasets.append(dataset.add_column("from", [f"{dataset_name}_{dataset_config}"] * len(dataset)))
         except ValueError:

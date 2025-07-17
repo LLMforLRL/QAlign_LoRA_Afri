@@ -136,7 +136,7 @@ class SupervisedDataset(Dataset):
 
         logging.warning("Formatting inputs...")
         dataset_name = os.path.basename(data_path)
-        if "nli" in dataset_name:
+        if "nli" in dataset_name and "translation" not in dataset_name:
             prompt_nli = PROMPT_DICT["prompt_nli"]
             sources = [
                 prompt_nli.format_map(example) for example in list_data_dict
