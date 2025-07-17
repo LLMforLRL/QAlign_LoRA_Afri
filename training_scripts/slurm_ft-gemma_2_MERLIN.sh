@@ -19,14 +19,14 @@ bash training_scripts/finetune_modified.sh gemma-2-9b-it african-bilingual-pairs
 
 # stage 2: question alignment
 # finetuning model on question translation data
-bash training_scripts/finetune_modified.sh gemma-2-9b-it.african_bilingual_pairs_all.finetune gsm8kafri_[:3000]
+bash training_scripts/finetune_modified.sh gemma-2-9b-it.african-bilingual-pairs_all.finetune gsm8kafri_[:3000]
 
 # stage 3: response alignment
 # finetuning stage 1 model with MetaMathQA dataset
-bash training_scripts/finetune_modified.sh gemma-2-9b-it.african_bilingual_pairs_all.finetune.gsm8kafri_[:3000].finetune metamath_all
+bash training_scripts/finetune_modified.sh gemma-2-9b-it.african-bilingual-pairs_all.finetune.gsm8kafri_[:3000].finetune metamath_all
 
 # EVALUATION MGSM
-MODEL="gemma-2-9b-it.african_bilingual_pairs_all.finetune.gsm8kafri_[:3000].finetune.metamath_all.finetune"
+MODEL="gemma-2-9b-it.african-bilingual-pairs_all.finetune.gsm8kafri_[:3000].finetune.metamath_all.finetune"
 
 PROJECT_PATH="$(pwd)"
 SCRATCH_PATH=~/scratch/QAlign

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --gpus-per-node=a100:2
+#SBATCH --gpus-per-node=a100:3
 #SBATCH --mem=128G
 #SBATCH --time=168:00:00
 #SBATCH --account=def-annielee
@@ -16,7 +16,7 @@ source ~/scratch/QAlign/ENV/bin/activate
 
 # stage 1: question alignment
 # finetuning on question translation data
-bash training_scripts/finetune_modified.sh gemma-2-9b-it gsmtrans_gsm8kinstruct_question_all-en
+# bash training_scripts/finetune_modified.sh gemma-2-9b-it gsmtrans_gsm8kinstruct_question_all-en
 
 # stage 2: response alignment
 # finetuning stage 1 model with MetaMathQA dataset
@@ -35,7 +35,7 @@ python $PROJECT_PATH/evaluate/scripts/mgsm_test.py \
     --streategy Parallel \
     --batch_size 16 \
 
-python $PROJECT_PATH/evaluate/scripts/msvamp_test.py \
+python $PROJECT_PATH/evaluate/scripts/svamp_test.py \
     --model_path $MODEL_PATH \
     --streategy Parallel \
     --batch_size 16 \
